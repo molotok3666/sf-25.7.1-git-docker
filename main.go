@@ -18,6 +18,7 @@ type ringBuffer struct {
 
 // Добавляет элемент в буффер
 func (r *ringBuffer) Push(el int) {
+	addLog(fmt.Sprintf("add element \"%d\" into buffer", el))
 	r.m.Lock()
 	defer r.m.Unlock()
 
@@ -34,6 +35,7 @@ func (r *ringBuffer) Push(el int) {
 
 // Берет элемент из буффера (FIFO)
 func (r *ringBuffer) Get() []int {
+	addLog("get elements from buffer")
 	if r.pos < 0 {
 		return nil
 	}
@@ -48,17 +50,21 @@ func (r *ringBuffer) Get() []int {
 
 // Создает новый буффер
 func NewRingBuffer() *ringBuffer {
+	addLog("create ring buffer")
+
 	return &ringBuffer{make([]int, BUFFER_SIZE), -1, BUFFER_SIZE, sync.Mutex{}}
 }
 
 // Фильтрует отрицательные числа
 func filterNegative(done <-chan bool, ch <-chan int) <-chan int {
+	addLog(fmt.Sprintf("initialize negative filter"))
 	nextCh := make(chan int)
 
 	go func() {
 		for {
 			select {
 			case number := <-ch:
+				addLog(fmt.Sprintf("filter number \"%d\" by not div three filter", number))
 				if number >= 0 {
 					nextCh <- number
 				}
@@ -73,11 +79,13 @@ func filterNegative(done <-chan bool, ch <-chan int) <-chan int {
 
 // Фильтрует числа не кратные 3 и равные 0
 func filterNotDivThree(done <-chan bool, ch <-chan int) <-chan int {
+	addLog(fmt.Sprintf("initialize not div three filter"))
 	nextCh := make(chan int)
 	go func() {
 		for {
 			select {
 			case number := <-ch:
+				addLog(fmt.Sprintf("filter number \"%d\" by not div three filter", number))
 				if number != 0 && number%3 == 0 {
 					nextCh <- number
 				}
@@ -92,6 +100,7 @@ func filterNotDivThree(done <-chan bool, ch <-chan int) <-chan int {
 
 // Записывает в буффер
 func writeToBuffer(done <-chan bool, ch <-chan int) <-chan int {
+	addLog(fmt.Sprintf("initialize buffer pipeline"))
 	nextCh := make(chan int)
 	buffer := ringBuffer{make([]int, BUFFER_SIZE), -1, BUFFER_SIZE, sync.Mutex{}}
 
@@ -99,6 +108,7 @@ func writeToBuffer(done <-chan bool, ch <-chan int) <-chan int {
 		for {
 			select {
 			case number := <-ch:
+				addLog(fmt.Sprintf("write to buffer number \"%d\"", number))
 				buffer.Push(number)
 			case <-done:
 				return
@@ -108,7 +118,9 @@ func writeToBuffer(done <-chan bool, ch <-chan int) <-chan int {
 
 	go func() {
 		for {
+			addLog(fmt.Sprintf("sleep for %d start", BUFFER_CLEAR_INTERFVAL))
 			time.Sleep(BUFFER_CLEAR_INTERFVAL * time.Second)
+			addLog(fmt.Sprintf("sleep for %d end", BUFFER_CLEAR_INTERFVAL))
 			bufferData := buffer.Get()
 
 			for _, data := range bufferData {
@@ -126,6 +138,7 @@ func writeToBuffer(done <-chan bool, ch <-chan int) <-chan int {
 
 // Возвращает источник данных (канал чтения из консоли)
 func getSource() (<-chan int, <-chan bool) {
+	addLog("get source channel")
 	ch := make(chan int)
 	done := make(chan bool)
 
@@ -150,7 +163,13 @@ func getSource() (<-chan int, <-chan bool) {
 	return ch, done
 }
 
+func addLog(m string) {
+	currentTime := time.Now()
+	fmt.Println(fmt.Sprintf("[%s] %s", currentTime.Format("2006-01-02 15:04:05.000000000"), m))
+}
+
 func main() {
+	addLog("program start")
 	source, done := getSource()
 	bufferedPipeline := writeToBuffer(done, filterNotDivThree(done, filterNegative(done, source)))
 
